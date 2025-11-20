@@ -1,0 +1,3 @@
+[supabase]
+url = "https://bycrgeydepwemggotgmr.supabase.co"
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5Y3JnZXlkZXB3ZW1nZ290Z21yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1ODkyMDEsImV4cCI6MjA3OTE2NTIwMX0.hUc8nCMKdwBLlPNnCSbghmabOnSTAgAVSnRrWasmMhs"
