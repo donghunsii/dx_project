@@ -140,8 +140,8 @@ st.markdown("""
     
     .big-score { font-size: 36px; font-weight: 900; margin-bottom: 10px; color: #1F2937; }
 
-    /* 입력 필드 강조 (선택적) */
-    .stNumberInput label { font-weight: bold; color: #4F46E5; }
+    /* 입력 필드 강조 */
+    .stNumberInput label { font-weight: bold; color: #4F46E5; font-size: 14px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -168,10 +168,9 @@ def fetch_loan_data(api_key, loan_type="credit"):
         return None
 
 # -----------------------------------------------------------
-# 4. 사이드바 콘텐츠 (브랜딩 강화)
+# 4. 사이드바 콘텐츠
 # -----------------------------------------------------------
 with st.sidebar:
-    # [NEW] 브랜딩 영역
     st.markdown('<div class="brand-logo">LOAN.NAV</div>', unsafe_allow_html=True)
     st.markdown('<div class="brand-slogan">사회초년생을 위한 금융 나침반 🧭</div>', unsafe_allow_html=True)
     
@@ -184,7 +183,7 @@ with st.sidebar:
     
     st.caption(f"💰 연봉 환산: 약 {annual_income:,}만 원")
     
-    st.write("") # 간격
+    st.write("") 
     
     st.markdown("### 🎯 신용 정보")
     score_mapping = {
@@ -200,7 +199,6 @@ with st.sidebar:
     
     st.divider()
     
-    # 찜 목록 버튼 스타일링
     if st.button("❤️ 내 찜 목록 확인", use_container_width=True, type="primary"):
         if supabase:
             try:
@@ -235,20 +233,20 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # TAB 1: 신용대출 (Grid View)
 # ===========================================================
 with tab1:
-    # [UX 개선] 헤더와 입력창을 좌우로 배치하여 강조
+    # [UX 개선] 레이아웃 분할 (설명 2 : 입력 1)
     c_header, c_input = st.columns([2, 1])
     
     with c_header:
         st.markdown("### 🏃🏻 급한 생활비/비상금 (신용대출)")
         st.markdown("금융감독원 실시간 데이터를 분석하여 **최저금리 순**으로 추천합니다.")
-        if annual_income > 0: # 연봉 정보가 있을 때만
+        if annual_income > 0:
              st.caption(f"💡 {user_name}님의 연봉({annual_income:,}만원) 기준 안전 한도를 고려하세요.")
 
     with c_input:
-        # 입력창을 우측 상단에 두드러지게 배치
+        # [UX 개선] 우측 상단 강조 배치
         credit_amount = st.number_input("필요 금액 (만원)", 100, 10000, 2000, step=100, key="credit_amt")
     
-    st.divider() # 구분선 추가로 헤더 영역과 리스트 영역 분리
+    st.divider()
 
     if credit_amount > annual_income:
         st.warning(f"⚠️ 연봉({annual_income}만원)보다 높은 금액은 1금융권 대출 승인이 어려울 수 있습니다.")
@@ -259,6 +257,9 @@ with tab1:
     if df_credit is not None:
         df_c = df_credit[df_credit[target_col].notnull()].copy()
         df_c[target_col] = pd.to_numeric(df_c[target_col])
+        
+        # [Data Cleaning] 비정상 금리(1% 미만) 필터링 & 중복 제거
+        df_c = df_c[df_c[target_col] > 1.0]
         df_c = df_c.sort_values(by=target_col).drop_duplicates(['fin_prdt_cd'], keep='first').head(9)
         
         cols_per_row = 3
@@ -335,7 +336,7 @@ with tab1:
         st.error("데이터를 불러오지 못했습니다.")
 
 # ===========================================================
-# TAB 2: 주택담보대출
+# TAB 2: 주택담보대출 (필터 수정됨: 원리금분할상환 -> 분할상환 검색)
 # ===========================================================
 with tab2:
     # [UX 개선] 헤더와 입력창 좌우 배치
@@ -343,10 +344,18 @@ with tab2:
     
     with c_header:
         st.markdown("### 🏠 내 집 마련의 꿈 (주택담보대출)")
-        st.info("💡 주담대는 개인 신용보다 '담보물 가치'와 '시장 금리'의 영향을 받으므로, 최저~최고 금리 범위로 제공됩니다.")
+        st.info("💡 주담대는 개인 신용보다 '담보물 가치(KB시세)'와 '시장 금리'의 영향을 받으므로, 최저~최고 금리 범위로 제공됩니다.")
     
     with c_input:
         house_amount = st.number_input("대출 희망 금액 (만원)", 5000, 100000, 20000, step=1000, key="house_amt")
+
+    # [NEW] 필터
+    st.write("")
+    f_col1, f_col2 = st.columns(2)
+    with f_col1:
+        rate_type_filter = st.selectbox("금리 방식", ["전체", "변동금리", "고정금리"])
+    with f_col2:
+        pay_type_filter = st.selectbox("상환 방식", ["전체", "원리금분할상환", "만기일시상환"])
 
     st.divider()
 
@@ -354,75 +363,91 @@ with tab2:
         df_mortgage = fetch_loan_data(API_KEY, "mortgage")
 
     if df_mortgage is not None and 'lend_rate_min' in df_mortgage.columns:
-        df_m = df_mortgage.sort_values(by='lend_rate_min').drop_duplicates(['fin_prdt_cd'], keep='first').head(6)
+        # [Data Cleaning] 비정상 금리(1% 미만) 필터링
+        df_m = df_mortgage[df_mortgage['lend_rate_min'] > 1.0]
         
-        cols_per_row = 3
-        products = [row for _, row in df_m.iterrows()]
-        rows = [products[i:i + cols_per_row] for i in range(0, len(products), cols_per_row)]
+        # [NEW] 필터 적용 (검색어 유연하게 변경)
+        if rate_type_filter != "전체":
+            df_m = df_m[df_m['lend_rate_type_nm'].str.contains(rate_type_filter, na=False)]
+            
+        if pay_type_filter != "전체":
+            # [핵심 수정] '원리금분할상환' 선택 시 -> '분할상환' 글자만 있으면 통과! (API 데이터 특성 반영)
+            search_keyword = "분할상환" if pay_type_filter == "원리금분할상환" else pay_type_filter
+            df_m = df_m[df_m['rpay_type_nm'].str.contains(search_keyword, na=False)]
+        
+        # 정렬 및 중복 제거
+        df_m = df_m.sort_values(by='lend_rate_min').drop_duplicates(['fin_prdt_cd'], keep='first').head(9)
+        
+        if df_m.empty:
+            st.warning(f"조건에 맞는 상품이 없습니다. ({pay_type_filter} 조건 완화 필요)")
+        else:
+            cols_per_row = 3
+            products = [row for _, row in df_m.iterrows()]
+            rows = [products[i:i + cols_per_row] for i in range(0, len(products), cols_per_row)]
 
-        for row_idx, row_items in enumerate(rows):
-            cols = st.columns(cols_per_row)
-            for col_idx, product in enumerate(row_items):
-                current_rank = (row_idx * cols_per_row) + col_idx + 1
-                min_rate = product['lend_rate_min']
-                max_rate = product['lend_rate_max']
-                monthly_int = int(house_amount * 10000 * min_rate / 100 / 12)
-                
-                with cols[col_idx]:
-                    st.markdown(f"""
-                    <div class="grid-card">
-                        <div>
-                            <div style="display:flex; justify-content:space-between; align-items:start;">
-                                <span class="badge-rank">TOP {current_rank}</span>
-                                <span class="badge-bank">{product['kor_co_nm']}</span>
+            for row_idx, row_items in enumerate(rows):
+                cols = st.columns(cols_per_row)
+                for col_idx, product in enumerate(row_items):
+                    current_rank = (row_idx * cols_per_row) + col_idx + 1
+                    min_rate = product['lend_rate_min']
+                    max_rate = product['lend_rate_max']
+                    monthly_int = int(house_amount * 10000 * min_rate / 100 / 12)
+                    
+                    with cols[col_idx]:
+                        st.markdown(f"""
+                        <div class="grid-card">
+                            <div>
+                                <div style="display:flex; justify-content:space-between; align-items:start;">
+                                    <span class="badge-rank">TOP {current_rank}</span>
+                                    <span class="badge-bank">{product['kor_co_nm']}</span>
+                                </div>
+                                <h4 style="margin-top:20px; margin-bottom:10px; line-height:1.4; min-height:50px;">{product['fin_prdt_nm']}</h4>
+                                <div class="sub-text">
+                                    {product.get('mrtg_type_nm', '아파트')} | {product.get('rpay_type_nm', '분할상환')}
+                                </div>
                             </div>
-                            <h4 style="margin-top:20px; margin-bottom:10px; line-height:1.4; min-height:50px;">{product['fin_prdt_nm']}</h4>
-                            <div class="sub-text">
-                                {product.get('mrtg_type_nm', '아파트')} | {product.get('rpay_type_nm', '분할상환')}
+                            <div style="text-align:right; margin-top:20px;">
+                                <div class="sub-text">최저 금리 기준</div>
+                                <div class="highlight-rate" style="color:#10B981;">{min_rate}%</div>
+                                <div style="font-size:15px; font-weight:600; color:#374151;">월 이자 {monthly_int:,}원~</div>
                             </div>
                         </div>
-                        <div style="text-align:right; margin-top:20px;">
-                            <div class="sub-text">최저 금리 기준</div>
-                            <div class="highlight-rate" style="color:#10B981;">{min_rate}%</div>
-                            <div style="font-size:15px; font-weight:600; color:#374151;">월 이자 {monthly_int:,}원~</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    b_col1, b_col2 = st.columns(2)
-                    with b_col1:
-                        with st.popover("📄 상세 분석", use_container_width=True):
-                            st.markdown(f"### {product['kor_co_nm']} - {product['fin_prdt_nm']}")
-                            st.divider()
-                            period = 360 
-                            monthly_rate_dec = min_rate / 100 / 12
-                            payment = (house_amount * 10000 * monthly_rate_dec * (1+monthly_rate_dec)**period) / ((1+monthly_rate_dec)**period - 1)
-                            total_interest = (payment * period) - (house_amount * 10000)
-                            
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                st.metric("최저 금리", f"{min_rate}%")
-                                st.metric("상환 기간", "30년 (가정)")
-                            with c2:
-                                st.metric("월 납입", f"{int(payment):,}원")
-                                st.metric("총 이자", f"{int(total_interest/10000):,}만 원")
-                            st.markdown("---")
-                    
-                    with b_col2:
-                        if st.button("찜하기 ❤️", key=f"m_like_{current_rank}", use_container_width=True):
-                            if supabase:
-                                try:
-                                    supabase.table("loans_bookmark").insert({
-                                        "user_name": user_name,
-                                        "bank_name": product['kor_co_nm'],
-                                        "product_name": product['fin_prdt_nm'],
-                                        "interest_rate": float(min_rate)
-                                    }).execute()
-                                    st.toast(f"저장 완료!", icon="✅")
-                                except:
-                                    st.error("저장 실패")
-                            else:
-                                st.toast("DB 미연결", icon="⚠️")
+                        """, unsafe_allow_html=True)
+                        
+                        b_col1, b_col2 = st.columns(2)
+                        with b_col1:
+                            with st.popover("📄 상세 분석", use_container_width=True):
+                                st.markdown(f"### {product['kor_co_nm']} - {product['fin_prdt_nm']}")
+                                st.divider()
+                                period = 360 
+                                monthly_rate_dec = min_rate / 100 / 12
+                                payment = (house_amount * 10000 * monthly_rate_dec * (1+monthly_rate_dec)**period) / ((1+monthly_rate_dec)**period - 1)
+                                total_interest = (payment * period) - (house_amount * 10000)
+                                
+                                c1, c2 = st.columns(2)
+                                with c1:
+                                    st.metric("최저 금리", f"{min_rate}%")
+                                    st.metric("상환 기간", "30년 (가정)")
+                                with c2:
+                                    st.metric("월 납입", f"{int(payment):,}원")
+                                    st.metric("총 이자", f"{int(total_interest/10000):,}만 원")
+                                st.markdown("---")
+                        
+                        with b_col2:
+                            if st.button("찜하기 ❤️", key=f"m_like_{current_rank}", use_container_width=True):
+                                if supabase:
+                                    try:
+                                        supabase.table("loans_bookmark").insert({
+                                            "user_name": user_name,
+                                            "bank_name": product['kor_co_nm'],
+                                            "product_name": product['fin_prdt_nm'],
+                                            "interest_rate": float(min_rate)
+                                        }).execute()
+                                        st.toast(f"저장 완료!", icon="✅")
+                                    except:
+                                        st.error("저장 실패")
+                                else:
+                                    st.toast("DB 미연결", icon="⚠️")
     else:
         st.error("데이터 로딩 실패")
 
@@ -430,15 +455,12 @@ with tab2:
 # TAB 3: 승인 확률 진단
 # ===========================================================
 with tab3:
-    # [UX 개선] 헤더와 핵심 입력(금액) 좌우 배치
     c_header, c_input = st.columns([2, 1])
-    
     with c_header:
         st.header("🚦 AI 대출 승인 예측")
         st.info("나의 소득, 신용점수, 기존 대출 정보를 분석하여 1금융권 승인 가능성을 진단합니다.")
-    
     with c_input:
-        # '진단할 금액'을 우측 상단으로 올려서 강조
+        # [UX 개선] 우측 상단 배치
         diag_amount = st.number_input("신청할 대출금 (만원)", 100, 20000, 3000, step=100, key='diag_amt')
     
     st.divider()
@@ -514,7 +536,6 @@ with tab3:
 # TAB 4: 상환 시뮬레이션
 # ===========================================================
 with tab4:
-    # [UX 개선] 헤더와 핵심 입력(금액) 좌우 배치
     c_header, c_input = st.columns([2, 1])
     with c_header:
         st.header("📅 상환 계획 & 월급 쪼개기")
